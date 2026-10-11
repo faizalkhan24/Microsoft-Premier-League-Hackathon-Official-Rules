@@ -317,6 +317,29 @@ def test_api_rest_endpoints():
     assert "Full Match Intelligence Recap" in res.json()["title"]
 
 
+def test_api_playback_controls():
+    client = TestClient(app)
+
+    # Pause match
+    res = client.post("/api/match/pause")
+    assert res.status_code == 200
+    assert res.json()["is_paused"] is True
+
+    # Check status reflects paused state
+    res = client.get("/api/match/status")
+    assert res.json()["is_paused"] is True
+
+    # Set speed
+    res = client.post("/api/match/speed?speed=2.0")
+    assert res.status_code == 200
+    assert res.json()["speed_multiplier"] == 2.0
+
+    # Resume match
+    res = client.post("/api/match/resume")
+    assert res.status_code == 200
+    assert res.json()["is_paused"] is False
+
+
 def test_websocket_stream_initial_sync():
     client = TestClient(app)
     with client.websocket_connect("/ws/match-stream") as ws:

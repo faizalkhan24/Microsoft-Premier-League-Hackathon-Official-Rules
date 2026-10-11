@@ -26,6 +26,8 @@ class MatchBroadcastManager:
         self.cached_events: List[MatchEvent] = []
         self.max_buffer_size = max_buffer_size
         self.is_running = True
+        self.is_paused = False
+        self.speed_multiplier = 1.0
         self.broadcast_task: asyncio.Task | None = None
 
     async def connect(self, websocket: WebSocket):
@@ -44,6 +46,8 @@ class MatchBroadcastManager:
                 "second": int(self.simulator.current_time_s % 60),
                 "current_time_s": self.simulator.current_time_s,
             },
+            "is_paused": self.is_paused,
+            "speed_multiplier": self.speed_multiplier,
             "recent_events": [e.model_dump() for e in self.cached_events[-30:]],
             "recent_insights": [i.model_dump() for i in self.orchestrator.shared_blackboard[-20:]],
         }
@@ -73,6 +77,8 @@ class MatchBroadcastManager:
                 "phase": event.match_phase,
                 "timestamp_s": event.timestamp_s,
             },
+            "is_paused": self.is_paused,
+            "speed_multiplier": self.speed_multiplier,
         })
 
         # Broadcast to all connected clients
@@ -89,18 +95,22 @@ class MatchBroadcastManager:
     async def run_loop(self):
         """Single centralized background match progression loop."""
         while self.is_running:
-            try:
-                event = self.simulator.step_event()
-                insights = self.orchestrator.dispatch(event)
-                await self.broadcast_event(event, insights)
-            except Exception as e:
-                print(f"Error in broadcast loop: {e}")
-            await asyncio.sleep(1.2)
+            if not self.is_paused:
+                try:
+                    event = self.simulator.step_event()
+                    insights = self.orchestrator.dispatch(event)
+                    await self.broadcast_event(event, insights)
+                except Exception as e:
+                    print(f"Error in broadcast loop: {e}")
+            delay = max(0.2, 1.2 / max(0.1, self.speed_multiplier))
+            await asyncio.sleep(delay)
 
     def reset(self):
         self.simulator = SyntheticMatchSimulator()
         self.orchestrator = AgentOrchestrator()
         self.cached_events.clear()
+        self.is_paused = False
+        self.speed_multiplier = 1.0
 
 
 manager = MatchBroadcastManager()
@@ -172,8 +182,28 @@ async def get_match_status():
             "second": second,
             "timestamp_s": manager.simulator.current_time_s,
         },
+        "is_paused": manager.is_paused,
+        "speed_multiplier": manager.speed_multiplier,
         "total_events": len(manager.cached_events),
     }
+
+
+@app.post("/api/match/pause")
+async def pause_match():
+    manager.is_paused = True
+    return {"status": "paused", "is_paused": manager.is_paused}
+
+
+@app.post("/api/match/resume")
+async def resume_match():
+    manager.is_paused = False
+    return {"status": "resumed", "is_paused": manager.is_paused}
+
+
+@app.post("/api/match/speed")
+async def set_speed(speed: float = 1.0):
+    manager.speed_multiplier = max(0.25, min(5.0, speed))
+    return {"status": "speed_updated", "speed_multiplier": manager.speed_multiplier}
 
 
 @app.get("/api/match/events")
@@ -207,8 +237,18 @@ async def match_stream_websocket(websocket: WebSocket):
     try:
         # Keep client connection open to receive broadcast messages
         while True:
-            # Client can optionally send ping or pause/play commands
-            await websocket.receive_text()
+            text = await websocket.receive_text()
+            try:
+                cmd = json.loads(text)
+                action = cmd.get("action")
+                if action == "pause":
+                    manager.is_paused = True
+                elif action == "resume":
+                    manager.is_paused = False
+                elif action == "speed":
+                    manager.speed_multiplier = max(0.25, min(5.0, float(cmd.get("value", 1.0))))
+            except Exception:
+                pass
     except WebSocketDisconnect:
         manager.disconnect(websocket)
     except Exception:

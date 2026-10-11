@@ -28,7 +28,84 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [isRecapOpen, setIsRecapOpen] = useState(false);
   const [recapData, setRecapData] = useState(null);
+
+  // Playback & Audio Controls State
+  const [isPaused, setIsPaused] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
   const wsRef = useRef(null);
+  const lastSpokenIdRef = useRef(null);
+
+  // Text-to-Speech (TTS) synthesizer helper
+  const speakText = (text, lang = 'en') => {
+    if (!('speechSynthesis' in window) || !text) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.05;
+      utterance.pitch = 1.0;
+
+      const langCodes = {
+        en: 'en-US',
+        es: 'es-ES',
+        fr: 'fr-FR',
+        de: 'de-DE',
+        ar: 'ar-SA',
+        hi: 'hi-IN',
+      };
+      utterance.lang = langCodes[lang] || 'en-US';
+
+      const voices = window.speechSynthesis.getVoices();
+      const matched = voices.find((v) => v.lang.startsWith(lang));
+      if (matched) utterance.voice = matched;
+
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn('TTS error:', e);
+    }
+  };
+
+  const handleToggleAudio = () => {
+    const next = !isAudioEnabled;
+    setIsAudioEnabled(next);
+    if (next) {
+      speakText('Premier League live audio commentary active', currentLang);
+    } else {
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
+  };
+
+  const handleTogglePause = async () => {
+    const nextPaused = !isPaused;
+    setIsPaused(nextPaused);
+    try {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: nextPaused ? 'pause' : 'resume' }));
+      }
+      await fetch(nextPaused ? '/api/match/pause' : '/api/match/resume', { method: 'POST' });
+    } catch (e) {
+      console.warn('Pause toggle error:', e);
+    }
+  };
+
+  const handleChangeSpeed = async (speed) => {
+    setPlaybackSpeed(speed);
+    try {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: 'speed', value: speed }));
+      }
+      await fetch(`/api/match/speed?speed=${speed}`, { method: 'POST' });
+    } catch (e) {
+      console.warn('Speed change error:', e);
+    }
+  };
 
   // Fetch initial teams
   useEffect(() => {
@@ -74,6 +151,8 @@ export default function App() {
           if (data.type === 'initial_sync') {
             if (data.score) setScore(data.score);
             if (data.clock) setClock(data.clock);
+            if (data.is_paused !== undefined) setIsPaused(data.is_paused);
+            if (data.speed_multiplier !== undefined) setPlaybackSpeed(data.speed_multiplier);
             if (data.recent_events && data.recent_events.length > 0) {
               setEvents(data.recent_events);
               setCurrentEvent(data.recent_events[data.recent_events.length - 1]);
@@ -92,9 +171,26 @@ export default function App() {
                 const updated = [...prev, ...data.insights];
                 return updated.length > 100 ? updated.slice(-80) : updated;
               });
+
+              // Voice Commentary Trigger (if enabled)
+              if (isAudioEnabled) {
+                const spokenInsight = data.insights.find(
+                  (i) =>
+                    (i.language === currentLang || (!i.language && currentLang === 'en')) &&
+                    (i.persona_target === 'casual' ||
+                      i.persona_target === 'all' ||
+                      i.importance === 'critical' ||
+                      i.importance === 'high')
+                );
+                if (spokenInsight && spokenInsight.insight_id !== lastSpokenIdRef.current) {
+                  lastSpokenIdRef.current = spokenInsight.insight_id;
+                  speakText(spokenInsight.content, currentLang);
+                }
+              }
             }
             if (data.score) setScore(data.score);
             if (data.clock) setClock(data.clock);
+            if (data.is_paused !== undefined) setIsPaused(data.is_paused);
           }
         } catch (err) {
           console.error('Error parsing WS message:', err);
@@ -117,7 +213,7 @@ export default function App() {
       if (ws) ws.close();
       if (timer) clearTimeout(timer);
     };
-  }, []);
+  }, [isAudioEnabled, currentLang]);
 
   const handleResetMatch = async () => {
     try {
@@ -139,41 +235,35 @@ export default function App() {
       setRecapData(data);
       setIsRecapOpen(true);
     } catch (err) {
-      console.error('Recap fetch error:', err);
-      setRecapData({
-        title: 'Full Match Intelligence Recap: Arsenal FC - Manchester City',
-        summary: 'Intense Premier League encounter characterized by high-tempo pressing and rapid tactical transitions.',
-        key_milestones: ['First Half Tactical Block established', 'Contested midfield half-space battle'],
-        tactical_verdict: 'Both managers implemented disciplined positional frameworks with quick vertical breakouts.',
-      });
-      setIsRecapOpen(true);
+      console.error(err);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#120015] text-slate-100 flex flex-col p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
-      {/* Top Header Navigation */}
-      <header className="flex flex-col md:flex-row items-center justify-between pb-6 border-b border-pl-border/60 gap-4 mb-6">
+    <div className="min-h-screen bg-pl-dark text-slate-100 p-3 sm:p-6 font-sans">
+      {/* Top Navigation & Brand Header */}
+      <header className="flex flex-col md:flex-row items-center justify-between gap-4 mb-5 border-b border-pl-border/80 pb-4">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-pl-pink to-pl-purple border border-pl-cyan/40 flex items-center justify-center shadow-lg">
-            <Tv className="w-5 h-5 text-pl-cyan" />
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pl-pink via-pl-purple to-pl-cyan p-0.5 shadow-lg shadow-pink-500/20">
+            <div className="w-full h-full bg-pl-dark rounded-[14px] flex items-center justify-center">
+              <Tv className="w-5 h-5 text-pl-cyan" />
+            </div>
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="text-xl font-bold tracking-tight text-white font-display">
+              <h1 className="text-xl font-extrabold tracking-tight text-white font-display">
                 INSIDE THE GAME
               </h1>
-              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-pl-cyan/20 text-pl-cyan border border-pl-cyan/40">
-                AI Match Intelligence
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-pl-purple text-pl-cyan border border-pl-cyan/30">
+                AI Studio
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Microsoft Premier League Hackathon • 5-Stage Agentic Intelligence Pipeline
+              Microsoft AI Foundry • Match Intelligence & Multimodal Overlays
             </p>
           </div>
         </div>
 
-        {/* Global Action Bar */}
         <div className="flex items-center space-x-2.5">
           <button
             onClick={handleResetMatch}
@@ -193,7 +283,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Broadcast TV Scorebug & Tactical Telemetry */}
+      {/* Main Broadcast TV Scorebug & Tactical Telemetry with Play/Pause/Audio */}
       <BroadcastHUD
         score={score}
         clock={clock}
@@ -201,6 +291,13 @@ export default function App() {
         homeTeam={homeTeam}
         awayTeam={awayTeam}
         isConnected={isConnected}
+        isPaused={isPaused}
+        onTogglePause={handleTogglePause}
+        playbackSpeed={playbackSpeed}
+        onChangeSpeed={handleChangeSpeed}
+        isAudioEnabled={isAudioEnabled}
+        onToggleAudio={handleToggleAudio}
+        isSpeaking={isSpeaking}
       />
 
       {/* Main Grid: Pitch Visualizer + Persona Intelligence Studio */}
