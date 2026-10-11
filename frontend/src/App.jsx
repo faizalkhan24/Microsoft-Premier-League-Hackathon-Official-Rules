@@ -3,10 +3,8 @@ import {
   Layers,
   Sparkles,
   User,
-  Play,
   RotateCcw,
   FileText,
-  Volume2,
   Tv,
 } from 'lucide-react';
 import PitchVisualizer from './components/PitchVisualizer';
@@ -34,8 +32,11 @@ export default function App() {
 
   // Fetch initial teams
   useEffect(() => {
-    fetch('http://localhost:8000/api/match/teams')
-      .then((res) => res.json())
+    fetch('/api/match/teams')
+      .then((res) => {
+        if (!res.ok) throw new Error('Teams endpoint error');
+        return res.json();
+      })
       .then((data) => {
         setHomeTeam(data.home_team);
         setAwayTeam(data.away_team);
@@ -53,7 +54,14 @@ export default function App() {
     let timer;
 
     function connect() {
-      ws = new WebSocket('ws://localhost:8000/ws/match-stream');
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = window.location.host || 'localhost:8000';
+      // In local vite dev (port 3000), point to 8000
+      const wsUrl = host.includes(':3000')
+        ? 'ws://localhost:8000/ws/match-stream'
+        : `${protocol}//${host}/ws/match-stream`;
+
+      ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -63,11 +71,27 @@ export default function App() {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === 'match_update') {
+          if (data.type === 'initial_sync') {
+            if (data.score) setScore(data.score);
+            if (data.clock) setClock(data.clock);
+            if (data.recent_events && data.recent_events.length > 0) {
+              setEvents(data.recent_events);
+              setCurrentEvent(data.recent_events[data.recent_events.length - 1]);
+            }
+            if (data.recent_insights && data.recent_insights.length > 0) {
+              setInsights(data.recent_insights);
+            }
+          } else if (data.type === 'match_update') {
             setCurrentEvent(data.event);
-            setEvents((prev) => [...prev, data.event]);
+            setEvents((prev) => {
+              const updated = [...prev, data.event];
+              return updated.length > 200 ? updated.slice(-150) : updated;
+            });
             if (data.insights && data.insights.length > 0) {
-              setInsights((prev) => [...prev, ...data.insights]);
+              setInsights((prev) => {
+                const updated = [...prev, ...data.insights];
+                return updated.length > 100 ? updated.slice(-80) : updated;
+              });
             }
             if (data.score) setScore(data.score);
             if (data.clock) setClock(data.clock);
@@ -79,8 +103,7 @@ export default function App() {
 
       ws.onclose = () => {
         setIsConnected(false);
-        // Retry connection after 3s
-        timer = setTimeout(connect, 3000);
+        timer = setTimeout(connect, 2500);
       };
 
       ws.onerror = () => {
@@ -98,7 +121,7 @@ export default function App() {
 
   const handleResetMatch = async () => {
     try {
-      await fetch('http://localhost:8000/api/match/reset', { method: 'POST' });
+      await fetch('/api/match/reset', { method: 'POST' });
       setEvents([]);
       setInsights([]);
       setScore({ home: 0, away: 0 });
@@ -111,13 +134,12 @@ export default function App() {
 
   const handleOpenRecap = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/match/recap');
+      const res = await fetch('/api/match/recap');
       const data = await res.json();
       setRecapData(data);
       setIsRecapOpen(true);
     } catch (err) {
       console.error('Recap fetch error:', err);
-      // Fallback recap
       setRecapData({
         title: 'Full Match Intelligence Recap: Arsenal FC - Manchester City',
         summary: 'Intense Premier League encounter characterized by high-tempo pressing and rapid tactical transitions.',

@@ -11,6 +11,7 @@ export default function MultiLanguageTicker({ insights, currentLang, onSelectLan
     { code: 'hi', name: 'हिन्दी' },
   ];
 
+  const isRtl = currentLang === 'ar';
   const filtered = insights.filter((i) => i.language === currentLang);
   const latestInsight = filtered.length > 0 ? filtered[filtered.length - 1] : null;
 
@@ -37,13 +38,16 @@ export default function MultiLanguageTicker({ insights, currentLang, onSelectLan
         </div>
       </div>
 
-      {/* Live Commentary Ticker */}
-      <div className="flex-1 w-full bg-pl-dark/80 px-3 py-1.5 rounded-lg border border-pl-border/60 text-xs overflow-hidden flex items-center space-x-2">
-        <span className="w-2 h-2 rounded-full bg-pl-cyan animate-ping flex-shrink-0"></span>
-        <p className="text-slate-200 truncate font-sans">
+      {/* Live Commentary Ticker with RTL support */}
+      <div
+        dir={isRtl ? 'rtl' : 'ltr'}
+        className="flex-1 w-full bg-pl-dark/80 px-3 py-1.5 rounded-lg border border-pl-border/60 text-xs overflow-hidden flex items-center space-x-2"
+      >
+        <span className="w-2 h-2 rounded-full bg-pl-cyan animate-ping flex-shrink-0 mx-1"></span>
+        <p className={`text-slate-200 truncate ${isRtl ? 'font-serif text-[13px]' : 'font-sans'}`}>
           {latestInsight ? (
             <span>
-              <strong className="text-pl-cyan mr-1.5">[{latestInsight.minute}']</strong>
+              <strong className="text-pl-cyan mx-1.5">[{latestInsight.minute}']</strong>
               {latestInsight.content}
             </span>
           ) : (

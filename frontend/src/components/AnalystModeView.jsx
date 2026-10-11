@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cpu, ShieldCheck, TrendingUp, BarChart2 } from 'lucide-react';
+import { Cpu, ShieldCheck, TrendingUp, BarChart2, Hash } from 'lucide-react';
 
 export default function AnalystModeView({ events, insights }) {
   const analystInsights = insights.filter((i) => i.persona_target === 'analyst' || i.persona_target === 'all');
@@ -7,17 +7,13 @@ export default function AnalystModeView({ events, insights }) {
   const passes = events.filter((e) => e.event_type === 'pass');
   const lineBreaks = passes.filter((p) => p.pass_detail?.is_line_breaking);
 
-  const avgPassDiff = passes.length
+  const avgPassDiff = passes.length > 0
     ? (passes.reduce((acc, p) => acc + (p.pass_detail?.difficulty_rating || 0), 0) / passes.length) * 100
-    : 35;
+    : 35.0;
 
-  const totalXgHome = shots
-    .filter((s) => s.team_id === 'arsenal')
-    .reduce((acc, s) => acc + (s.shot_detail?.xg || 0), 0);
-
-  const totalXgAway = shots
-    .filter((s) => s.team_id === 'mancity')
-    .reduce((acc, s) => acc + (s.shot_detail?.xg || 0), 0);
+  const latestEvent = events.length > 0 ? events[events.length - 1] : null;
+  const homeXg = latestEvent?.tactical_metrics?.home_xg_cumulative ?? 0.0;
+  const awayXg = latestEvent?.tactical_metrics?.away_xg_cumulative ?? 0.0;
 
   return (
     <div className="space-y-4">
@@ -26,9 +22,9 @@ export default function AnalystModeView({ events, insights }) {
         <div className="bg-pl-card border border-pl-border rounded-xl p-3">
           <span className="text-[11px] text-slate-400 flex items-center"><TrendingUp className="w-3.5 h-3.5 mr-1 text-pl-cyan" /> Cumulative xG</span>
           <div className="text-lg font-mono font-bold mt-1 text-slate-100">
-            ARS <span className="text-red-400">{totalXgHome.toFixed(2)}</span> - <span className="text-sky-300">{totalXgAway.toFixed(2)}</span> MCI
+            ARS <span className="text-red-400">{homeXg.toFixed(2)}</span> - <span className="text-sky-300">{awayXg.toFixed(2)}</span> MCI
           </div>
-          <span className="text-[9px] text-slate-400">Expected Goals model calibrated</span>
+          <span className="text-[9px] text-slate-400">Direction-aware geometric model</span>
         </div>
 
         <div className="bg-pl-card border border-pl-border rounded-xl p-3">
@@ -52,11 +48,11 @@ export default function AnalystModeView({ events, insights }) {
           <div className="text-xl font-mono font-bold mt-1 text-purple-300">
             {events.length}
           </div>
-          <span className="text-[9px] text-slate-400">Real-time synthetic stream buffer</span>
+          <span className="text-[9px] text-slate-400">Real-time validated stream buffer</span>
         </div>
       </div>
 
-      {/* Deep Tactical Reasoning Stream */}
+      {/* Deep Tactical Reasoning Stream with Evidence IDs */}
       <div className="bg-pl-card border border-pl-border rounded-2xl p-4 shadow-lg">
         <div className="flex items-center justify-between mb-3 border-b border-pl-border pb-2">
           <div className="flex items-center space-x-2">
@@ -72,13 +68,31 @@ export default function AnalystModeView({ events, insights }) {
           {analystInsights.length === 0 ? (
             <p className="text-xs text-slate-400 italic py-4 text-center">Processing tactical telemetry stream...</p>
           ) : (
-            analystInsights.slice().reverse().slice(0, 8).map((insight, idx) => (
-              <div key={idx} className="bg-pl-dark/80 border border-pl-border rounded-xl p-3 text-xs hover:border-pl-cyan/50 transition">
+            analystInsights.slice().reverse().slice(0, 8).map((insight) => (
+              <div key={insight.insight_id} className="bg-pl-dark/80 border border-pl-border rounded-xl p-3 text-xs hover:border-pl-cyan/50 transition">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="font-bold text-pl-cyan font-mono text-[11px]">{insight.headline}</span>
-                  <span className="text-[10px] text-slate-400 font-mono">{insight.minute}'</span>
+                  <div className="flex items-center space-x-2 font-mono text-[10px] text-slate-400">
+                    {insight.confidence && (
+                      <span className="text-emerald-400">{(insight.confidence * 100).toFixed(0)}% conf</span>
+                    )}
+                    <span>{insight.minute}'</span>
+                  </div>
                 </div>
                 <p className="text-slate-300 leading-relaxed text-[11px]">{insight.content}</p>
+
+                {/* Evidence Traceability Badge */}
+                {insight.evidence_event_ids && insight.evidence_event_ids.length > 0 && (
+                  <div className="mt-2 pt-1.5 border-t border-pl-border/40 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                    <span className="flex items-center">
+                      <Hash className="w-3 h-3 mr-1 text-pl-cyan" />
+                      Evidence: {insight.evidence_event_ids.join(', ')}
+                    </span>
+                    <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-slate-800 text-slate-400">
+                      {insight.importance} priority
+                    </span>
+                  </div>
+                )}
               </div>
             ))
           )}

@@ -23,6 +23,7 @@ def get_premier_league_teams() -> tuple[Team, Team]:
         primary_color="#EF0107",
         secondary_color="#063672",
         formation="4-3-3",
+        attacking_direction=1,
         roster=arsenal_players,
     )
 
@@ -47,6 +48,7 @@ def get_premier_league_teams() -> tuple[Team, Team]:
         primary_color="#6CABDD",
         secondary_color="#1C2C5B",
         formation="4-2-3-1",
+        attacking_direction=-1,
         roster=mancity_players,
     )
 
