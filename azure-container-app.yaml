@@ -1,0 +1,35 @@
+apiVersion: 2023-05-01
+kind: ContainerApp
+metadata:
+  name: insidethegame-match-intelligence
+  location: eastus
+spec:
+  managedEnvironmentId: /subscriptions/{SUBSCRIPTION_ID}/resourceGroups/{RESOURCE_GROUP}/providers/Microsoft.App/managedEnvironments/insidethegame-env
+  configuration:
+    ingress:
+      external: true
+      targetPort: 8000
+      transport: auto
+      allowInsecure: false
+    dapr:
+      enabled: false
+  template:
+    containers:
+      - image: insidethegame.azurecr.io/match-intelligence:latest
+        name: api-studio
+        resources:
+          cpu: 1.0
+          memory: 2.0Gi
+        env:
+          - name: ENVIRONMENT
+            value: production
+          - name: AZURE_AI_FOUNDRY_PROJECT
+            value: insidethegame-foundry-agents
+    scale:
+      minReplicas: 1
+      maxReplicas: 5
+      rules:
+        - name: http-scaling
+          http:
+            metadata:
+              concurrentRequests: "50"

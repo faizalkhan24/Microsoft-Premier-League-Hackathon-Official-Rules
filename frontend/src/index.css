@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  h1, h2, h3, .font-display {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+  }
+}
+
+.pl-glow {
+  box-shadow: 0 0 25px rgba(0, 255, 133, 0.25);
+}
+
+.pl-glow-pink {
+  box-shadow: 0 0 25px rgba(233, 0, 82, 0.25);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(18, 0, 21, 0.6);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #3c1843;
+  border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #00ff85;
+}
