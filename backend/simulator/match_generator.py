@@ -79,6 +79,8 @@ class SyntheticMatchSimulator:
 
         team = self.possession_team
         opp_team = self.away_team if team.id == self.home_team.id else self.home_team
+        event_team = team
+        event_loc = PitchLocation(x=self.current_ball_loc.x, y=self.current_ball_loc.y, z=self.current_ball_loc.z)
         target_goal_x = 105.0 if team.id == "arsenal" else 0.0
 
         # Attacking third detection based on team attack direction
@@ -97,13 +99,15 @@ class SyntheticMatchSimulator:
             event_type = EventType.SHOT
             shooter = self._select_next_player(team, current_role="attacker")
             player = shooter
+            shot_loc = PitchLocation(x=self.current_ball_loc.x, y=self.current_ball_loc.y, z=self.current_ball_loc.z)
+            event_loc = shot_loc
 
             # Target location in opposing goalmouth
             target_y = random.uniform(31.5, 36.5)
             target_loc = PitchLocation(x=target_goal_x, y=round(target_y, 2), z=round(random.uniform(0.1, 1.8), 2))
 
             shot_type = random.choice(["open_play", "open_play", "volley", "header"])
-            xg = self.engine.calculate_xg(self.current_ball_loc, target_goal_x=target_goal_x, shot_type=shot_type)
+            xg = self.engine.calculate_xg(shot_loc, target_goal_x=target_goal_x, shot_type=shot_type)
             shot_xg = xg
             shot_speed = round(random.uniform(84.0, 118.5), 1)
 
@@ -117,7 +121,7 @@ class SyntheticMatchSimulator:
                     self.home_score += 1
                 else:
                     self.away_score += 1
-                # Reset to center kickoff
+                # Next phase begins with center kickoff
                 self.current_ball_loc = PitchLocation(x=52.5, y=34.0, z=0.0)
                 self.possession_team = opp_team
             else:
@@ -127,7 +131,7 @@ class SyntheticMatchSimulator:
 
             shot_detail = ShotDetail(
                 shot_type=shot_type,
-                location=self.current_ball_loc,
+                location=shot_loc,
                 target_location=target_loc,
                 xg=xg,
                 shot_speed_kmh=shot_speed,
@@ -146,7 +150,9 @@ class SyntheticMatchSimulator:
             event_type = random.choice([EventType.TURNOVER, EventType.TACKLE, EventType.INTERCEPTION])
             is_turnover = True
             player = self._select_next_player(opp_team, current_role="defense")
+            event_team = opp_team
             self.possession_team = opp_team
+            event_loc = PitchLocation(x=self.current_ball_loc.x, y=self.current_ball_loc.y, z=self.current_ball_loc.z)
 
         else:
             # PASSING SEQUENCE
@@ -192,6 +198,8 @@ class SyntheticMatchSimulator:
             )
 
             player = passer
+            event_team = team
+            event_loc = self.current_ball_loc
             if success:
                 self.current_ball_loc = end_loc
             else:
@@ -214,8 +222,8 @@ class SyntheticMatchSimulator:
         # Tactical state update
         tactical_metrics = self.engine.update_tactical_state(
             event_type=event_type,
-            team_id=team.id,
-            location=self.current_ball_loc,
+            team_id=event_team.id,
+            location=event_loc,
             success=pass_detail.success if pass_detail else True,
             is_turnover=is_turnover,
             shot_xg=shot_xg,
@@ -224,8 +232,8 @@ class SyntheticMatchSimulator:
         explainability = self.engine.generate_explainability_context(
             event_type=event_type,
             player_name=player.name,
-            team_name=team.name,
-            location=self.current_ball_loc,
+            team_name=event_team.name,
+            location=event_loc,
             pass_detail=pass_detail,
             shot_detail=shot_detail,
             is_turnover=is_turnover,
@@ -240,12 +248,12 @@ class SyntheticMatchSimulator:
             minute=minute,
             second=second,
             match_phase=phase,
-            team_id=team.id,
-            team_name=team.name,
+            team_id=event_team.id,
+            team_name=event_team.name,
             player_id=player.id,
             player_name=player.name,
             event_type=event_type,
-            location=self.current_ball_loc,
+            location=event_loc,
             pass_detail=pass_detail,
             shot_detail=shot_detail,
             tactical_metrics=tactical_metrics,
@@ -255,6 +263,9 @@ class SyntheticMatchSimulator:
                 "away_score": self.away_score,
                 "home_team": self.home_team.short_name,
                 "away_team": self.away_team.short_name,
+                "player_distance_covered_m": self.player_stats.get(player.name, {}).get("distance_covered_m", 0.0),
+                "player_sprint_speed_kmh": self.player_stats.get(player.name, {}).get("sprint_speed_kmh", 0.0),
+                "player_touches": self.player_stats.get(player.name, {}).get("touches", 0),
             },
         )
 

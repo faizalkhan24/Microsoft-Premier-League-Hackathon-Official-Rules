@@ -166,17 +166,27 @@ class MetricsEngine:
 
         if event_type == EventType.PASS:
             if team_id == "arsenal":
-                self.away_passes_in_mid_third += 1
+                self.home_passes_in_mid_third += 1
                 if success:
                     self.home_consecutive_passes += 1
                     self.home_momentum = min(92.0, self.home_momentum + 1.6)
                     self.away_momentum = max(8.0, self.away_momentum - 1.2)
+                else:
+                    self.home_consecutive_passes = 0
+                    self.rolling_control = max(18.0, self.rolling_control - 6.0)
+                    self.away_momentum = min(92.0, self.away_momentum + 2.0)
+                    self.home_momentum = max(8.0, self.home_momentum - 2.0)
             else:
-                self.home_passes_in_mid_third += 1
+                self.away_passes_in_mid_third += 1
                 if success:
                     self.away_consecutive_passes += 1
                     self.away_momentum = min(92.0, self.away_momentum + 1.6)
                     self.home_momentum = max(8.0, self.home_momentum - 1.2)
+                else:
+                    self.away_consecutive_passes = 0
+                    self.rolling_control = max(18.0, self.rolling_control - 6.0)
+                    self.home_momentum = min(92.0, self.home_momentum + 2.0)
+                    self.away_momentum = max(8.0, self.away_momentum - 2.0)
             
             if success:
                 # Controlled sequence builds stability

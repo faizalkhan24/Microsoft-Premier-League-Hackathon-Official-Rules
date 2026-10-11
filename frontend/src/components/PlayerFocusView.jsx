@@ -39,18 +39,23 @@ export default function PlayerFocusView({ events, homeTeam, awayTeam }) {
   const playerShots = useMemo(() => playerEvents.filter((e) => e.event_type === 'shot' || e.event_type === 'goal'), [playerEvents]);
   const playerGoals = useMemo(() => playerEvents.filter((e) => e.event_type === 'goal'), [playerEvents]);
 
-  // Measured peak speed from events
+  // Measured peak speed from events and engine telemetry
   const peakSpeedKmh = useMemo(() => {
     let maxSpeed = 0.0;
     playerEvents.forEach((e) => {
+      if (e.metadata?.player_sprint_speed_kmh) maxSpeed = Math.max(maxSpeed, e.metadata.player_sprint_speed_kmh);
       if (e.pass_detail?.speed_kmh) maxSpeed = Math.max(maxSpeed, e.pass_detail.speed_kmh * 0.45);
       if (e.shot_detail?.shot_speed_kmh) maxSpeed = Math.max(maxSpeed, e.shot_detail.shot_speed_kmh * 0.32);
     });
     return maxSpeed > 0 ? maxSpeed.toFixed(1) : '31.4';
   }, [playerEvents]);
 
-  // Measured distance covered in km (accumulating pass displacement & movement)
+  // Measured distance covered in km (accumulated engine telemetry)
   const distanceKm = useMemo(() => {
+    const lastEvent = playerEvents[playerEvents.length - 1];
+    if (lastEvent?.metadata?.player_distance_covered_m) {
+      return (lastEvent.metadata.player_distance_covered_m / 1000).toFixed(2);
+    }
     let totalMeters = 0.0;
     playerEvents.forEach((e) => {
       if (e.pass_detail?.distance_m) totalMeters += e.pass_detail.distance_m * 0.8;

@@ -12,7 +12,7 @@ export default function MultiLanguageTicker({ insights, currentLang, onSelectLan
   ];
 
   const isRtl = currentLang === 'ar';
-  const filtered = insights.filter((i) => i.language === currentLang);
+  const filtered = insights.filter((i) => i.language === currentLang || (!i.language && currentLang === 'en'));
   const latestInsight = filtered.length > 0 ? filtered[filtered.length - 1] : null;
 
   return (

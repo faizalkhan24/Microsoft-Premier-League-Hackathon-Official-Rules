@@ -336,3 +336,155 @@ def test_broadcast_manager_memory_bounds():
         manager.cached_events.append(e)
     assert len(manager.cached_events) <= manager.max_buffer_size
 
+
+# ==========================================
+# 8. Runtime Defect Regression Tests
+# ==========================================
+
+def test_goal_location_preservation_and_kickoff_reset():
+    """Verify that a goal's coordinates are preserved in the box rather than overwritten to (52.5, 34.0),
+    and that the subsequent restart event begins from the center circle."""
+    sim = SyntheticMatchSimulator()
+    # Force an Arsenal goal event
+    sim.current_ball_loc = PitchLocation(x=96.0, y=34.0, z=0.0)
+    sim.possession_team = sim.home_team
+    
+    # Run events until a goal is scored or manually trigger one
+    found_goal = False
+    for _ in range(250):
+        prev_loc = (sim.current_ball_loc.x, sim.current_ball_loc.y)
+        event = sim.step_event()
+        if event.event_type == EventType.GOAL:
+            found_goal = True
+            # Goal location must be inside the attacking box, not center kickoff!
+            assert event.location.x != 52.5 or event.location.y != 34.0, "Goal location must not be center circle!"
+            if event.team_id == "arsenal":
+                assert event.location.x > 70.0, f"Arsenal goal should be in attacking third, got {event.location.x}"
+            else:
+                assert event.location.x < 35.0, f"Man City goal should be in attacking third, got {event.location.x}"
+            
+            # Shot detail must also retain the origin location
+            assert event.shot_detail is not None
+            assert event.shot_detail.location.x == event.location.x
+            
+            # Next event must start from center circle (52.5, 34.0)
+            next_event = sim.step_event()
+            assert abs(next_event.location.x - 52.5) < 1.0
+            assert abs(next_event.location.y - 34.0) < 1.0
+            break
+    assert found_goal, "Should produce at least one goal in 250 simulated events"
+
+
+def test_defensive_action_team_attribution():
+    """Verify that tackle and interception events are correctly attributed to the defending team and player."""
+    sim = SyntheticMatchSimulator()
+    home_team, away_team = get_premier_league_teams()
+    home_roster_names = {p.name for p in home_team.roster}
+    away_roster_names = {p.name for p in away_team.roster}
+
+    events = sim.generate_full_match_stream(100)
+    defensive_events = [e for e in events if e.event_type in [EventType.TACKLE, EventType.INTERCEPTION]]
+    assert len(defensive_events) > 0, "Should generate defensive actions in 100 events"
+
+    for dev in defensive_events:
+        if dev.player_name in home_roster_names:
+            assert dev.team_id == home_team.id, f"Arsenal defender {dev.player_name} misattributed to {dev.team_id}"
+            assert dev.team_name == home_team.name
+        elif dev.player_name in away_roster_names:
+            assert dev.team_id == away_team.id, f"Man City defender {dev.player_name} misattributed to {dev.team_id}"
+            assert dev.team_name == away_team.name
+
+
+def test_mid_third_pass_counters_and_incomplete_reset():
+    """Verify that passes are counted toward the correct team and that incomplete passes reset streaks."""
+    engine = MetricsEngine()
+    
+    # Arsenal pass (complete)
+    state1 = engine.update_tactical_state(
+        event_type=EventType.PASS,
+        team_id="arsenal",
+        location=PitchLocation(x=50.0, y=34.0),
+        success=True,
+    )
+    assert engine.home_passes_in_mid_third == 1
+    assert engine.away_passes_in_mid_third == 0
+    assert engine.home_consecutive_passes == 1
+
+    # Man City pass (complete)
+    state2 = engine.update_tactical_state(
+        event_type=EventType.PASS,
+        team_id="mancity",
+        location=PitchLocation(x=55.0, y=34.0),
+        success=True,
+    )
+    assert engine.home_passes_in_mid_third == 1
+    assert engine.away_passes_in_mid_third == 1
+    assert engine.away_consecutive_passes == 1
+
+    # Arsenal pass (incomplete) -> resets home streak
+    control_before = engine.rolling_control
+    state3 = engine.update_tactical_state(
+        event_type=EventType.PASS,
+        team_id="arsenal",
+        location=PitchLocation(x=60.0, y=34.0),
+        success=False,
+    )
+    assert engine.home_consecutive_passes == 0
+    assert engine.rolling_control < control_before
+
+
+def test_stateless_recap_milestone_derivation():
+    """Verify that NarrativeRecapAgent derives milestones from all_events statelessly."""
+    fresh_agent = NarrativeRecapAgent()
+    assert len(fresh_agent.milestones) == 0
+
+    mock_goal = MatchEvent(
+        event_id="ev_goal_99",
+        match_id="test_m",
+        timestamp_s=1200.0,
+        wall_clock_iso="2026-10-11T12:00:00Z",
+        minute=20,
+        second=0,
+        match_phase=MatchPhase.FIRST_HALF,
+        team_id="arsenal",
+        team_name="Arsenal",
+        player_id="ars_7",
+        player_name="Bukayo Saka",
+        event_type=EventType.GOAL,
+        location=PitchLocation(x=95.0, y=34.0),
+        shot_detail=ShotDetail(
+            shot_type="open_play",
+            location=PitchLocation(x=95.0, y=34.0),
+            target_location=PitchLocation(x=105.0, y=34.0),
+            xg=0.58,
+            shot_speed_kmh=102.0,
+            on_target=True,
+            is_goal=True,
+        ),
+        tactical_metrics=TacticalMetricState(
+            control_vs_chaos=60.0,
+            home_momentum=65.0,
+            away_momentum=35.0,
+            home_possession_pct=55.0,
+            away_possession_pct=45.0,
+            home_xg_cumulative=0.58,
+            away_xg_cumulative=0.10,
+            pressing_intensity_ppda=8.2,
+            field_tilt_pct=60.0,
+            defensive_line_depth_m=52.0,
+        ),
+        explainability=ExplainabilityContext(
+            significance_level="critical",
+            why_it_matters="Pivotal opening goal",
+            tactical_pattern="Cutback finish",
+            player_impact="Clinical execution",
+        ),
+        metadata={"home_team": "ARS", "away_team": "MCI", "home_score": 1, "away_score": 0},
+    )
+
+    recap = fresh_agent.generate_full_recap(mock_goal, [mock_goal])
+    assert len(recap["key_milestones"]) >= 1
+    assert any("Bukayo Saka" in m for m in recap["key_milestones"])
+    assert any("Minute 20'" in m for m in recap["key_milestones"])
+
+

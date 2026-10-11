@@ -5,6 +5,9 @@ export default function BroadcastHUD({ score, clock, metrics, homeTeam, awayTeam
   const control = metrics?.control_vs_chaos ?? 65;
   const homeMom = metrics?.home_momentum ?? 50;
   const awayMom = metrics?.away_momentum ?? 50;
+  const totalMom = Math.max(1, homeMom + awayMom);
+  const homeMomPct = Math.round((homeMom / totalMom) * 100);
+  const awayMomPct = 100 - homeMomPct;
   const homePoss = metrics?.home_possession_pct ?? 50;
   const awayPoss = metrics?.away_possession_pct ?? 50;
   const ppda = metrics?.pressing_intensity_ppda ?? 8.5;
@@ -55,7 +58,7 @@ export default function BroadcastHUD({ score, clock, metrics, homeTeam, awayTeam
         </div>
 
         {/* Real Tactical Telemetry Ribbon */}
-        <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
+        <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 w-full">
           {/* Control vs Chaos Index */}
           <div className="bg-pl-dark/60 border border-pl-border/50 rounded-xl p-2.5 flex flex-col justify-between">
             <div className="flex items-center justify-between text-[11px] text-slate-400">
@@ -84,7 +87,22 @@ export default function BroadcastHUD({ score, clock, metrics, homeTeam, awayTeam
               <div className="bg-sky-400 transition-all duration-500" style={{ width: `${awayPoss}%` }} />
             </div>
             <span className="text-[9px] text-slate-400 mt-1">
-              Cumulative tracked pass/action duration
+              Cumulative pass & action duration
+            </span>
+          </div>
+
+          {/* Momentum Tug-of-War */}
+          <div className="bg-pl-dark/60 border border-pl-border/50 rounded-xl p-2.5 flex flex-col justify-between">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span className="flex items-center"><Flame className="w-3 h-3 mr-1 text-pl-pink" /> Momentum Tug</span>
+              <span className="font-mono text-xs text-slate-200">{homeMomPct}% - {awayMomPct}%</span>
+            </div>
+            <div className="flex w-full h-1.5 rounded-full mt-2 overflow-hidden">
+              <div className="bg-red-500 transition-all duration-500" style={{ width: `${homeMomPct}%` }} />
+              <div className="bg-sky-400 transition-all duration-500" style={{ width: `${awayMomPct}%` }} />
+            </div>
+            <span className="text-[9px] text-slate-400 mt-1">
+              {homeMomPct > 55 ? `${homeTeam?.short_name || 'ARS'} in ascendancy` : awayMomPct > 55 ? `${awayTeam?.short_name || 'MCI'} pressing forward` : 'Evenly contested flow'}
             </span>
           </div>
 

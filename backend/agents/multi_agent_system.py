@@ -261,6 +261,22 @@ class NarrativeRecapAgent(BaseAgent):
 
         metrics = final_event.tactical_metrics
 
+        # Dynamically extract milestones from verified event stream
+        event_milestones = []
+        for e in all_events:
+            if e.event_type == EventType.GOAL:
+                event_milestones.append(
+                    f"Minute {e.minute}': Goal by {e.player_name} ({e.team_name}), "
+                    f"Score: {e.metadata.get('home_team', 'ARS')} {e.metadata.get('home_score', 0)} - "
+                    f"{e.metadata.get('away_score', 0)} {e.metadata.get('away_team', 'MCI')}"
+                )
+            elif e.event_type == EventType.SHOT and e.shot_detail and e.shot_detail.xg >= 0.40:
+                event_milestones.append(
+                    f"Minute {e.minute}': Big Chance ({e.shot_detail.xg:.2f} xG) by {e.player_name} ({e.team_name})"
+                )
+
+        combined_milestones = list(dict.fromkeys(self.milestones + event_milestones))
+
         return {
             "title": f"Full Match Intelligence Recap: {home_team} {home_score} - {away_score} {away_team}",
             "match_id": final_event.match_id,
@@ -285,7 +301,7 @@ class NarrativeRecapAgent(BaseAgent):
                 f"analyzed events. Possessions stood at {metrics.home_possession_pct}% to {metrics.away_possession_pct}%. "
                 f"Arsenal registered {metrics.home_xg_cumulative:.2f} xG against Manchester City's {metrics.away_xg_cumulative:.2f} xG."
             ),
-            "key_milestones": self.milestones if self.milestones else ["Disciplined defensive battle with compact positional blocks."],
+            "key_milestones": combined_milestones if combined_milestones else ["Disciplined defensive battle with compact positional blocks."],
             "tactical_verdict": (
                 f"Tactical control settled at {metrics.control_vs_chaos:.1f}/100. With {total_line_breaks} line-breaking passes "
                 "completed across both sides, space between defensive pivots proved the defining strategic battleground."

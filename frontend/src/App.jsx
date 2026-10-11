@@ -262,11 +262,11 @@ export default function App() {
 
           {/* Active Persona Content Panel */}
           {activePersona === 'analyst' && (
-            <AnalystModeView events={events} insights={insights} />
+            <AnalystModeView events={events} insights={insights} currentLang={currentLang} />
           )}
 
           {activePersona === 'casual' && (
-            <CasualModeView currentEvent={currentEvent} insights={insights} />
+            <CasualModeView currentEvent={currentEvent} insights={insights} currentLang={currentLang} />
           )}
 
           {activePersona === 'player' && (

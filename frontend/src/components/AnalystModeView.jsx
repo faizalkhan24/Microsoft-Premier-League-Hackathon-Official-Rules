@@ -1,8 +1,12 @@
 import React from 'react';
 import { Cpu, ShieldCheck, TrendingUp, BarChart2, Hash } from 'lucide-react';
 
-export default function AnalystModeView({ events, insights }) {
-  const analystInsights = insights.filter((i) => i.persona_target === 'analyst' || i.persona_target === 'all');
+export default function AnalystModeView({ events, insights, currentLang = 'en' }) {
+  const analystInsights = insights.filter(
+    (i) =>
+      (i.persona_target === 'analyst' || i.persona_target === 'all') &&
+      (i.language === currentLang || (!i.language && currentLang === 'en'))
+  );
   const shots = events.filter((e) => e.event_type === 'shot' || e.event_type === 'goal');
   const passes = events.filter((e) => e.event_type === 'pass');
   const lineBreaks = passes.filter((p) => p.pass_detail?.is_line_breaking);
