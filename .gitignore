@@ -9,6 +9,8 @@ __pycache__/
 *$py.class
 *.so
 .Python
+.coverage
+htmlcov/
 env/
 venv/
 .venv/

@@ -1,8 +1,12 @@
 import React from 'react';
 import { Sparkles, MessageSquareQuote, Flame, HelpCircle } from 'lucide-react';
 
-export default function CasualModeView({ currentEvent, insights }) {
-  const casualInsights = insights.filter((i) => i.persona_target === 'casual' || i.persona_target === 'all');
+export default function CasualModeView({ currentEvent, insights, currentLang = 'en' }) {
+  const casualInsights = insights.filter(
+    (i) =>
+      (i.persona_target === 'casual' || i.persona_target === 'all') &&
+      (i.language === currentLang || (!i.language && currentLang === 'en'))
+  );
   const explain = currentEvent?.explainability;
 
   return (
